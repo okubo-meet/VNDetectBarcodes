@@ -68,17 +68,24 @@ struct CameraView: UIViewControllerRepresentable {
     func makeUIViewController(context: UIViewControllerRepresentableContext<CameraView>) -> UIViewController {
         //Viewのサイズ
         viewController.view.frame = UIScreen.main.bounds
+        //枠線
+        let boxBprder = CALayer()
+        boxBprder.frame = CGRect(x: 45, y: 200, width: 300, height: 100)
+        boxBprder.borderColor = UIColor.red.cgColor
+        boxBprder.borderWidth = 2
         //カメラ映像のプレビュー
         let previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         //プレビューの画面サイズ
         previewLayer.frame = viewController.view.bounds
         //プレビューをViewに追加
         viewController.view.layer.addSublayer(previewLayer)
+        previewLayer.addSublayer(boxBprder)
         //カメラの映像をセット
         setCamera()
         //出力(映像)
         let videoDataOutput = AVCaptureVideoDataOutput()
         videoDataOutput.alwaysDiscardsLateVideoFrames = true
+        videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8PlanarFullRange)]
         //AVCaptureVideoDataOutputSampleBufferDelegateを呼び出す設定
         videoDataOutput.setSampleBufferDelegate(context.coordinator, queue: .main)
         //出力(メタデータ)
