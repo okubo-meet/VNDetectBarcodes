@@ -15,8 +15,16 @@ struct CameraView: UIViewControllerRepresentable {
     @Environment(\.dismiss) var dismiss
     //UIViewControllerのインスタンス生成
     let viewController = UIViewController()
+    //バーコードの位置に表示する枠線
+    var barcodeBox = CAShapeLayer()
     // セッションのインスタンス
     private let captureSession = AVCaptureSession()
+    //カメラ映像のプレビューレイヤー
+    let previewLayer = AVCaptureVideoPreviewLayer()
+    //ビデオデータ出力のインスタンス
+    let videoDataOutput = AVCaptureVideoDataOutput()
+    //メタデータ出力のインスタンス
+    let metaDataOutput = AVCaptureMetadataOutput()
     
     class Coordinator: AVCaptureSession, AVCaptureMetadataOutputObjectsDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
         let parent: CameraView
@@ -30,32 +38,36 @@ struct CameraView: UIViewControllerRepresentable {
         }
         //新たなビデオフレームが書き込むたびに呼び出されるデリゲートメソッド
         func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+            // フレームからImageBufferに変換
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
             //バーコード検出用のハンドラ
             let requestHandler = VNSequenceRequestHandler()
             //Vision 画像内のバーコードを検出するリクエスト
             let barcordesRequest = VNDetectBarcodesRequest { result, _ in
-                guard let barcode = result.results?.first as? VNBarcodeObservation else {
-                    return
-                }
-                
-                //読み取ったコードを出力
-                if let value = barcode.payloadStringValue {
-                    if value != self.parent.cameraViewModel.barcodeData {
-                        print("読み取り：\(value)")
-                        self.parent.cameraViewModel.barcodeData = value
-                        self.parent.cameraViewModel.barcodeType = barcode.symbology.rawValue
-                        //アラート表示
-                        self.parent.showAlert()
+                DispatchQueue.main.async {
+                    
+                    guard let barcode = result.results?.first as? VNBarcodeObservation else {
+                        self.parent.clearBox()
+                        return
+                    }
+                    //枠線表示
+                    self.parent.showBox(barcode: barcode)
+                    //読み取ったコードを出力
+                    if let value = barcode.payloadStringValue {
+                        if value != self.parent.cameraViewModel.barcodeData {
+                            print("読み取り：\(value)")
+                            self.parent.cameraViewModel.barcodeData = value
+                            self.parent.cameraViewModel.barcodeType = barcode.symbology.rawValue
+                            //アラート表示
+//                            self.parent.showAlert()
+                        }
                     }
                 }
-            }
+            }// VNDetectBarcodesRequest
             
-            //バーコード検出開始
-            try? requestHandler.perform([barcordesRequest], on: pixelBuffer)
-            
-        }
-        
+            //バーコード検出開始、orientationで座標の反転に対応
+            try? requestHandler.perform([barcordesRequest], on: pixelBuffer, orientation: .downMirrored)
+        }// captureOutput
         
     }// Coordinator
     
@@ -68,28 +80,20 @@ struct CameraView: UIViewControllerRepresentable {
     func makeUIViewController(context: UIViewControllerRepresentableContext<CameraView>) -> UIViewController {
         //Viewのサイズ
         viewController.view.frame = UIScreen.main.bounds
-        //枠線
-        let boxBprder = CALayer()
-        boxBprder.frame = CGRect(x: 45, y: 200, width: 300, height: 100)
-        boxBprder.borderColor = UIColor.red.cgColor
-        boxBprder.borderWidth = 2
-        //カメラ映像のプレビュー
-        let previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+        //プレビューするキャプチャを設定
+        previewLayer.session = captureSession
         //プレビューの画面サイズ
         previewLayer.frame = viewController.view.bounds
         //プレビューをViewに追加
         viewController.view.layer.addSublayer(previewLayer)
-        previewLayer.addSublayer(boxBprder)
         //カメラの映像をセット
         setCamera()
         //出力(映像)
-        let videoDataOutput = AVCaptureVideoDataOutput()
         videoDataOutput.alwaysDiscardsLateVideoFrames = true
         videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8PlanarFullRange)]
         //AVCaptureVideoDataOutputSampleBufferDelegateを呼び出す設定
-        videoDataOutput.setSampleBufferDelegate(context.coordinator, queue: .main)
+        videoDataOutput.setSampleBufferDelegate(context.coordinator, queue: DispatchQueue(label: "camera_frame_processing_queue"))
         //出力(メタデータ)
-        let metaDataOutput = AVCaptureMetadataOutput()
         //検出するメタデータのタイプ
         metaDataOutput.metadataObjectTypes = metaDataOutput.availableMetadataObjectTypes
         //AVCaptureMetadataOutputObjectsDelegateを呼び出す設定
@@ -120,6 +124,21 @@ struct CameraView: UIViewControllerRepresentable {
         })
         alert.addAction(action)
         viewController.present(alert, animated: true, completion: nil)
+    }
+    //バーコードの位置に線を表示する
+    func showBox(barcode: VNBarcodeObservation) {
+        let boxOnScreen = previewLayer.layerRectConverted(fromMetadataOutputRect: barcode.boundingBox)
+        let boxPath = CGPath(rect: boxOnScreen, transform: nil)
+        barcodeBox.path = boxPath
+        barcodeBox.borderWidth = 3
+        barcodeBox.fillColor = Color(.clear).cgColor
+        barcodeBox.strokeColor = Color(.red).cgColor
+        //枠線表示
+        previewLayer.addSublayer(barcodeBox)
+    }
+    //枠線を削除する関数
+    func clearBox() {
+        barcodeBox.removeFromSuperlayer()
     }
     //画面更新時の関数
     func updateUIViewController(_ uiViewController: UIViewController, context: UIViewControllerRepresentableContext<CameraView>) {
