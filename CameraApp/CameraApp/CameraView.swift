@@ -80,13 +80,8 @@ struct CameraView: UIViewControllerRepresentable {
     func makeUIViewController(context: UIViewControllerRepresentableContext<CameraView>) -> UIViewController {
         //Viewのサイズ
         viewController.view.frame = UIScreen.main.bounds
-        //プレビューするキャプチャを設定
-        previewLayer.session = captureSession
-        //プレビューの画面サイズ
-        previewLayer.frame = viewController.view.bounds
-        //プレビューをViewに追加
-        viewController.view.layer.addSublayer(previewLayer)
         //カメラの映像をセット
+        setPreviewLayer()
         setCamera()
         //出力(映像)
         videoDataOutput.alwaysDiscardsLateVideoFrames = true
@@ -113,6 +108,15 @@ struct CameraView: UIViewControllerRepresentable {
         captureSession.addInput(deviceInput)
         //キャプチャセッション開始
         captureSession.startRunning()
+    }
+    //カメラのキャプチャ映像をViewにセットする関数
+    func setPreviewLayer() {
+        //プレビューするキャプチャを設定
+        previewLayer.session = captureSession
+        //プレビューの画面サイズ
+        previewLayer.frame = viewController.view.bounds
+        //プレビューをViewに追加
+        viewController.view.layer.addSublayer(previewLayer)
     }
     //バーコード読み取り成功のアラートを出す関数
     func showAlert() {
