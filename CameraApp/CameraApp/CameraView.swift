@@ -47,7 +47,8 @@ struct CameraView: UIViewControllerRepresentable {
                 DispatchQueue.main.async {
                     
                     guard let barcode = result.results?.first as? VNBarcodeObservation else {
-                        self.parent.clearBox()
+                        //枠線を削除する
+                        self.parent.barcodeBox.removeFromSuperlayer()
                         return
                     }
                     //枠線表示
@@ -80,9 +81,22 @@ struct CameraView: UIViewControllerRepresentable {
     func makeUIViewController(context: UIViewControllerRepresentableContext<CameraView>) -> UIViewController {
         //Viewのサイズ
         viewController.view.frame = UIScreen.main.bounds
-        //カメラの映像をセット
-        setPreviewLayer()
-        setCamera()
+        //プレビューするキャプチャを設定
+        previewLayer.session = captureSession
+        //プレビューの画面サイズ
+        previewLayer.frame = viewController.view.bounds
+        //プレビューをViewに追加
+        viewController.view.layer.addSublayer(previewLayer)
+        //使用するカメラと撮っている映像を設定
+        if let captureDevice = AVCaptureDevice.default(for: .video),
+              let deviceInput = try? AVCaptureDeviceInput(device: captureDevice) {
+            if captureSession.canAddInput(deviceInput) {
+                //撮影している情報をセッションに渡す
+                captureSession.addInput(deviceInput)
+            }
+            //キャプチャセッション開始
+            captureSession.startRunning()
+        }
         //出力(映像)
         videoDataOutput.alwaysDiscardsLateVideoFrames = true
         videoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_420YpCbCr8PlanarFullRange)]
@@ -99,25 +113,6 @@ struct CameraView: UIViewControllerRepresentable {
         return viewController
     }// makeUIViewController
     
-    //カメラをセットする関数
-    func setCamera() {
-        //使用するカメラと撮っている映像を設定
-        guard let captureDevice = AVCaptureDevice.default(for: .video),
-              let deviceInput = try? AVCaptureDeviceInput(device: captureDevice) else { return }
-        //撮影している情報をセッションに渡す
-        captureSession.addInput(deviceInput)
-        //キャプチャセッション開始
-        captureSession.startRunning()
-    }
-    //カメラのキャプチャ映像をViewにセットする関数
-    func setPreviewLayer() {
-        //プレビューするキャプチャを設定
-        previewLayer.session = captureSession
-        //プレビューの画面サイズ
-        previewLayer.frame = viewController.view.bounds
-        //プレビューをViewに追加
-        viewController.view.layer.addSublayer(previewLayer)
-    }
     //バーコード読み取り成功のアラートを出す関数
     func showAlert() {
         print("アラート")
@@ -139,10 +134,6 @@ struct CameraView: UIViewControllerRepresentable {
         barcodeBox.strokeColor = Color(.red).cgColor
         //枠線表示
         previewLayer.addSublayer(barcodeBox)
-    }
-    //枠線を削除する関数
-    func clearBox() {
-        barcodeBox.removeFromSuperlayer()
     }
     //画面更新時の関数
     func updateUIViewController(_ uiViewController: UIViewController, context: UIViewControllerRepresentableContext<CameraView>) {
